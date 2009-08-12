@@ -136,6 +136,7 @@ null_write_conv(PurpleConversation *conv, const char *who, const char *alias,
 			purple_utf8_strftime("(%H:%M:%S)", localtime(&mtime)),
 			name, message);
 	port_write(msg);
+	free(msg);
 }
 
 static PurpleConversationUiOps null_conv_uiops = 
@@ -242,17 +243,15 @@ signed_on(PurpleConnection *gc, gpointer null)
 {
 	PurpleAccount *account = purple_connection_get_account(gc);
 	char *msg;
-	asprintf(&msg, "-ERR Connection failed");
 	asprintf(&msg, "+OK Account connected: %s %s\n", account->username, account->protocol_id);
 	port_write(msg);
-
+	free(msg);
 }
 
 static void
 connection_error(PurpleConnection *gc, gpointer null)
 {
 	port_write("-ERR Login failed");
-
 }
 
 static void
@@ -303,9 +302,6 @@ void handle_message(char *message) {
 			} else {
 				port_write("-ERR Syntax: login <username> <password> <protocol ID>");
 			}
-
-		} else if (!strcasecmp(message, "logout")) {
-			port_write("-ERR not implemented yet");
 		} else if (!strcasecmp(message, "message")) {
 			char *messageto = x;
 			char *message;
@@ -342,7 +338,21 @@ void handle_message(char *message) {
 			free(errormsg);
 		}
 	} else {
-		port_write(message);
+		if (!strcasecmp(message, "logout")) {
+			if (account && !purple_account_is_disconnected(account)) {
+				purple_account_disconnect(account);
+				purple_account_destroy(account);
+				account = NULL;
+				port_write("+OK Logged out");
+			} else {
+				port_write("+ERR Not logged in");
+			}
+		} else {
+			char *errormsg;
+			asprintf(&errormsg, "-ERR Unrecognized verb '%s'", message);
+			port_write(errormsg);
+			free(errormsg);
+		}
 	}
 }
 
