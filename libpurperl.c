@@ -39,7 +39,7 @@
 #define UI_NAME "libpurperl"
 
 GMainLoop *mainloop;
-PurpleAccount *account;
+PurpleAccount *account = NULL;
 
 
 typedef struct _PurpleGLibIOClosure {
@@ -242,8 +242,16 @@ signed_on(PurpleConnection *gc, gpointer null)
 {
 	PurpleAccount *account = purple_connection_get_account(gc);
 	char *msg;
-	asprintf(&msg, "Account connected: %s %s\n", account->username, account->protocol_id);
+	asprintf(&msg, "-ERR Connection failed");
+	asprintf(&msg, "+OK Account connected: %s %s\n", account->username, account->protocol_id);
 	port_write(msg);
+
+}
+
+static void
+connection_error(PurpleConnection *gc, gpointer null)
+{
+	port_write("-ERR Login failed");
 
 }
 
@@ -253,6 +261,8 @@ connect_to_signals(void)
 	static int handle;
 	purple_signal_connect(purple_connections_get_handle(), "signed-on", &handle,
 				PURPLE_CALLBACK(signed_on), NULL);
+	purple_signal_connect(purple_connections_get_handle(), "connection-error", &handle,
+				PURPLE_CALLBACK(connection_error), NULL);
 }
 
 void handle_message(char *message) {
@@ -265,6 +275,14 @@ void handle_message(char *message) {
 			char *username = x;
 			char *password;
 			char *protocol;
+
+			if (account && purple_account_is_disconnected(account)) {
+				purple_account_destroy(account);
+			} else if (account) {
+				port_write("-ERR Already connected");
+				return;
+			}
+			account = NULL;
 
 			if ((password = strchr(username, ' ')) && (protocol = strchr(password + 1, ' '))) {
 				/*int protocolid;*/
@@ -279,8 +297,9 @@ void handle_message(char *message) {
 				purple_account_set_enabled(account, UI_NAME, TRUE);
 				status = purple_savedstatus_new(NULL, PURPLE_STATUS_AVAILABLE);
 				purple_savedstatus_activate(status);
-				connect_to_signals();
-
+				if (purple_account_is_disconnected(account))  {
+					port_write("-ERR Login failed");
+				}
 			} else {
 				port_write("-ERR Syntax: login <username> <password> <protocol ID>");
 			}
@@ -307,6 +326,7 @@ void handle_message(char *message) {
 
 				if (im) {
 					purple_conv_im_send(im, message);
+					port_write("+OK Message sent");
 					return;
 				}
 
@@ -367,6 +387,8 @@ int main(int argc, char** argv) {
 	port_write("libpurple initialized");
 
 	g_io_add_watch(chan, G_IO_IN | G_IO_HUP | G_IO_ERR, socket_data, mainloop);
+
+	connect_to_signals();
 
 	g_main_loop_run (mainloop);
 
