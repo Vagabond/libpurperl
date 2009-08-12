@@ -36,6 +36,12 @@
 #define PURPLE_GLIB_READ_COND  (G_IO_IN | G_IO_HUP | G_IO_ERR)
 #define PURPLE_GLIB_WRITE_COND (G_IO_OUT | G_IO_HUP | G_IO_ERR | G_IO_NVAL)
 
+#define UI_NAME "libpurperl"
+
+GMainLoop *mainloop;
+PurpleAccount *account;
+
+
 typedef struct _PurpleGLibIOClosure {
 	PurpleInputFunction function;
 	guint result;
@@ -208,11 +214,9 @@ init_libpurple(void)
 	/* Now that all the essential stuff has been set, let's try to init the core. It's
 	 * necessary to provide a non-NULL name for the current ui to the core. This name
 	 * is used by stuff that depends on this ui, for example the ui-specific plugins. */
-	if (!purple_core_init("testing")) {
+	if (!purple_core_init(UI_NAME)) {
 		/* Initializing the core failed. Terminate. */
-		fprintf(stderr,
-				"libpurple initialization failed. Dumping core.\n"
-				"Please report this!\n");
+		port_write("-ERR libpurple initialization failed. Dumping core.");
 		abort();
 	}
 
@@ -264,7 +268,6 @@ void handle_message(char *message) {
 
 			if ((password = strchr(username, ' ')) && (protocol = strchr(password + 1, ' '))) {
 				/*int protocolid;*/
-				PurpleAccount *account;
 				PurpleSavedStatus *status;
 				*password = 0;
 				password++;
@@ -273,7 +276,7 @@ void handle_message(char *message) {
 
 				account = purple_account_new(username, protocol);
 				purple_account_set_password(account, password);
-				purple_account_set_enabled(account, "testing", TRUE);
+				purple_account_set_enabled(account, UI_NAME, TRUE);
 				status = purple_savedstatus_new(NULL, PURPLE_STATUS_AVAILABLE);
 				purple_savedstatus_activate(status);
 				connect_to_signals();
@@ -284,6 +287,34 @@ void handle_message(char *message) {
 
 		} else if (!strcasecmp(message, "logout")) {
 			port_write("-ERR not implemented yet");
+		} else if (!strcasecmp(message, "message")) {
+			char *messageto = x;
+			char *message;
+			if ((message = strchr(messageto, ' '))) {
+				PurpleConversation *conv;
+				PurpleConvIm       *im;
+
+				*message = 0;
+				message++;
+				conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, messageto, account);
+
+				/* If not, create a new one */
+				if (conv == NULL)
+					conv = purple_conversation_new(PURPLE_CONV_TYPE_IM, account, messageto);
+
+				/* Get the IM specific data */
+				im = purple_conversation_get_im_data(conv);
+
+				if (im) {
+					purple_conv_im_send(im, message);
+					return;
+				}
+
+				port_write("-ERR Failed to send message");
+
+			} else {
+				port_write("-ERR Syntax: message <username> <message>");
+			}
 		} else {
 			char *errormsg;
 			asprintf(&errormsg, "-ERR Unrecognized verb '%s'", message);
@@ -325,9 +356,10 @@ gboolean socket_data(GIOChannel *source, GIOCondition condition, gpointer data) 
 }
 
 int main(int argc, char** argv) {
-	GMainLoop *mainloop = g_main_loop_new (NULL, FALSE);
 	GIOChannel *chan = g_io_channel_unix_new(0);
 	
+	mainloop = g_main_loop_new (NULL, FALSE);
+
 	signal(SIGCHLD, SIG_IGN);
 
 	init_libpurple();
