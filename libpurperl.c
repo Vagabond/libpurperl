@@ -132,16 +132,23 @@ null_write_conv(PurpleConversation *conv, const char *who, const char *alias,
 	else
 		name = NULL;
 
-	asprintf(&msg, "(%s) %s %s: %s\n", purple_conversation_get_name(conv),
-			purple_utf8_strftime("(%H:%M:%S)", localtime(&mtime)),
-			name, message);
+	asprintf(&msg, "!MESSAGE %d %s %s %s",
+			(int) mktime(localtime(&mtime)), conv->name, name, message);
+	port_write(msg);
+	free(msg);
+}
+
+void create_conversation(PurpleConversation *conv)
+{
+	char *msg;
+	asprintf(&msg, "!CONVERSATION %s", conv->name);
 	port_write(msg);
 	free(msg);
 }
 
 static PurpleConversationUiOps null_conv_uiops = 
 {
-	NULL,                      /* create_conversation  */
+	create_conversation,       /* create_conversation  */
 	NULL,                      /* destroy_conversation */
 	NULL,                      /* write_chat           */
 	NULL,                      /* write_im             */
@@ -293,30 +300,30 @@ init_libpurple(void)
 	/*purple_pounces_load();*/
 }
 
-static void
-signed_on(PurpleConnection *gc, gpointer null)
-{
-	PurpleAccount *account = purple_connection_get_account(gc);
-	char *msg;
-	asprintf(&msg, "+OK Account connected: %s %s\n", account->username, account->protocol_id);
-	port_write(msg);
-	free(msg);
-}
+/*static void*/
+/*signed_on(PurpleConnection *gc, gpointer null)*/
+/*{*/
+	/*PurpleAccount *account = purple_connection_get_account(gc);*/
+	/*char *msg;*/
+	/*asprintf(&msg, "+OK Account connected: %s %s\n", account->username, account->protocol_id);*/
+	/*port_write(msg);*/
+	/*free(msg);*/
+/*}*/
 
-static void
-connection_error(PurpleConnection *gc, gpointer null)
-{
-	port_write("-ERR Login failed");
-}
+/*static void*/
+/*connection_error(PurpleConnection *gc, gpointer null)*/
+/*{*/
+	/*port_write("-ERR Login failed");*/
+/*}*/
 
 static void
 connect_to_signals(void)
 {
-	static int handle;
-	purple_signal_connect(purple_connections_get_handle(), "signed-on", &handle,
-				PURPLE_CALLBACK(signed_on), NULL);
-	purple_signal_connect(purple_connections_get_handle(), "connection-error", &handle,
-				PURPLE_CALLBACK(connection_error), NULL);
+	/*static int handle;*/
+	/*purple_signal_connect(purple_connections_get_handle(), "signed-on", &handle,*/
+				/*PURPLE_CALLBACK(signed_on), NULL);*/
+	/*purple_signal_connect(purple_connections_get_handle(), "connection-error", &handle,*/
+				/*PURPLE_CALLBACK(connection_error), NULL);*/
 }
 
 void handle_message(char *message) {
@@ -455,11 +462,9 @@ int main(int argc, char** argv) {
 
 	purple_util_set_user_dir(tmpdir);
 
-	port_write(purple_user_dir());
-
 	init_libpurple();
 
-	port_write("libpurple initialized");
+	port_write("+OK libpurple initialized");
 
 	g_io_add_watch(chan, G_IO_IN | G_IO_HUP | G_IO_ERR, socket_data, mainloop);
 
@@ -475,6 +480,7 @@ int main(int argc, char** argv) {
 		 * hack */
 		asprintf(&cmd, "rm -rf %s", tmpdir);
 		system(cmd);
+		free(cmd);
 	}
 
 	return 0;
