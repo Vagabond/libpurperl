@@ -283,14 +283,14 @@ init_libpurple(void)
 	purple_blist_load();
 
 	/* Load the preferences. */
-	purple_prefs_load();
+	/*purple_prefs_load();*/
 
 	/* Load the desired plugins. The client should save the list of loaded plugins in
 	 * the preferences using purple_plugins_save_loaded(PLUGIN_SAVE_PREF) */
 	/*purple_plugins_load_saved(PLUGIN_SAVE_PREF);*/
 
 	/* Load the pounces. */
-	purple_pounces_load();
+	/*purple_pounces_load();*/
 }
 
 static void
@@ -441,11 +441,21 @@ gboolean socket_data(GIOChannel *source, GIOCondition condition, gpointer data) 
 }
 
 int main(int argc, char** argv) {
+	char tmpdir[100] = "/tmp/.libpurperl-XXXXXXX";
 	GIOChannel *chan = g_io_channel_unix_new(0);
+
+	if (mkdtemp(tmpdir) == NULL) {
+		port_write("-ERR Failed to initialize temporary directory");
+		return 1;
+	}
 	
 	mainloop = g_main_loop_new (NULL, FALSE);
 
 	signal(SIGCHLD, SIG_IGN);
+
+	purple_util_set_user_dir(tmpdir);
+
+	port_write(purple_user_dir());
 
 	init_libpurple();
 
@@ -456,6 +466,16 @@ int main(int argc, char** argv) {
 	connect_to_signals();
 
 	g_main_loop_run (mainloop);
+
+	if (strlen(tmpdir) > 0) {
+		char *cmd;
+
+		/* TODO using system() for this is lame, but writing a recursive rmdir is
+		 * almost as bad. Until I find/write a function to do it we'll just use this
+		 * hack */
+		asprintf(&cmd, "rm -rf %s", tmpdir);
+		system(cmd);
+	}
 
 	return 0;
 }
