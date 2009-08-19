@@ -162,6 +162,61 @@ static PurpleConversationUiOps null_conv_uiops =
 	NULL
 };
 
+static void connection_connected(PurpleConnection *gc)
+{
+	PurpleAccount *account = purple_connection_get_account(gc);
+	char *msg;
+	asprintf(&msg, "+OK Account Connected: %s %s\n", account->username, account->protocol_id);
+	port_write(msg);
+	free(msg);
+}
+
+static void connection_disconnected(PurpleConnection *gc)
+{
+	PurpleAccount *account = purple_connection_get_account(gc);
+	char *msg;
+	asprintf(&msg, "+OK Account Disconnected: %s %s\n", account->username, account->protocol_id);
+	port_write(msg);
+	free(msg);
+}
+
+static void connection_notice(PurpleConnection *gc, const char *text)
+{
+	PurpleAccount *account = purple_connection_get_account(gc);
+	char *msg;
+	asprintf(&msg, "!NOTICE Account: %s %s Notice %s\n", account->username, account->protocol_id, text);
+	port_write(msg);
+	free(msg);
+}
+
+static void connection_report_disconnect_reason(PurpleConnection *gc, PurpleConnectionError reason, const char *text)
+{
+	PurpleAccount *account = purple_connection_get_account(gc);
+	char *msg;
+	if (purple_connection_error_is_fatal(reason)) {
+		asprintf(&msg, "!NOTICE Account permanently disconnected: %s %s Reason %s\n", account->username, account->protocol_id, text);
+	} else {
+		asprintf(&msg, "!NOTICE Account disconnected: %s %s Reason %s\n", account->username, account->protocol_id, text);
+	}
+	port_write(msg);
+	free(msg);
+}
+
+static PurpleConnectionUiOps conn_ui_ops =
+{
+	NULL, /* connect_progress */
+	connection_connected,
+	connection_disconnected,
+	connection_notice,
+	NULL, /* report_disconnect */
+	NULL, /* network_connected */
+	NULL, /* network disconnected */
+	connection_report_disconnect_reason,
+	NULL,
+	NULL,
+	NULL
+};
+
 static void
 null_ui_init(void)
 {
@@ -170,21 +225,23 @@ null_ui_init(void)
 	 * just initialize the UI for conversations.
 	 */
 	purple_conversations_set_ui_ops(&null_conv_uiops);
+	purple_connections_set_ui_ops(&conn_ui_ops);
 }
 
 static PurpleCoreUiOps null_core_uiops = 
 {
-	NULL,
-	NULL,
+	NULL, /* ui_prefs_init */
+	NULL, /* debug_ui_init */
 	null_ui_init,
-	NULL,
+	NULL, /* quit */
+	NULL, /* get_ui_info */
 
 	/* padding */
 	NULL,
 	NULL,
-	NULL,
 	NULL
 };
+
 
 static void
 init_libpurple(void)
@@ -235,8 +292,6 @@ init_libpurple(void)
 	/* Load the pounces. */
 	purple_pounces_load();
 }
-
-
 
 static void
 signed_on(PurpleConnection *gc, gpointer null)
