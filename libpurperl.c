@@ -141,9 +141,28 @@ null_write_conv(PurpleConversation *conv, const char *who, const char *alias,
 void create_conversation(PurpleConversation *conv)
 {
 	char *msg;
+	/*PurpleGroup *group;*/
+	/*PurpleBuddy *buddy;*/
+	/*PurpleContact *con;*/
 	asprintf(&msg, "!CONVERSATION %s", conv->name);
 	port_write(msg);
-	free(msg);
+
+	/*if (!(group = purple_find_group("transient"))) {*/
+		/*group = purple_group_new("transient");*/
+		/*purple_list_add_group(group, NULL);*/
+	/*}*/
+
+	/*if ((buddy = purple_find_buddy(conv->account, conv->name))) {*/
+		/*port_write("already aware of buddy");*/
+	/*} else {*/
+		/*buddy = purple_buddy_new(conv->account, conv->name, NULL);*/
+		/*purple_blist_node_set_flags((PurpleBlistNode *)buddy,*/
+				/*PURPLE_BLIST_NODE_FLAG_NO_SAVE);*/
+	/*}*/
+		/*con = purple_buddy_get_contact(buddy);*/
+		/*purple_blist_add_buddy(buddy, con, NULL, NULL);*/
+		/*port_write("added buddy");*/
+	/*}*/
 }
 
 static PurpleConversationUiOps null_conv_uiops = 
@@ -316,14 +335,50 @@ init_libpurple(void)
 	/*port_write("-ERR Login failed");*/
 /*}*/
 
+/*static void chat_buddy_left(PurpleConversation *conv, const char *name, const char *reason) {*/
+	/*char *msg;*/
+	/*asprintf(&msg, "!LEAVE %s %s", name, reason);*/
+	/*port_write(msg);*/
+	/*free(msg);*/
+/*}*/
+
+/*static void conversation_updated(PurpleConversation *conv, PurpleConvUpdateType type) {*/
+	/*char *msg;*/
+	/*asprintf(&msg, "!UPDATE %s %d", conv->name, type);*/
+	/*port_write(msg);*/
+	/*free(msg);*/
+/*}*/
+
+static void buddy_signed_off(PurpleBuddy *buddy) {
+	char *msg;
+	asprintf(&msg, "!SIGNOFF %s", buddy->name);
+	port_write(msg);
+	free(msg);
+}
+
+static void buddy_signed_on(PurpleBuddy *buddy) {
+	char *msg;
+	asprintf(&msg, "!SIGNON %s", buddy->name);
+	port_write(msg);
+	free(msg);
+}
+
 static void
 connect_to_signals(void)
 {
-	/*static int handle;*/
+	static int handle;
 	/*purple_signal_connect(purple_connections_get_handle(), "signed-on", &handle,*/
 				/*PURPLE_CALLBACK(signed_on), NULL);*/
 	/*purple_signal_connect(purple_connections_get_handle(), "connection-error", &handle,*/
 				/*PURPLE_CALLBACK(connection_error), NULL);*/
+	/*purple_signal_connect(purple_conversations_get_handle(), "chat-buddy-left", &handle,*/
+			/*PURPLE_CALLBACK(chat_buddy_left), NULL);*/
+	/*purple_signal_connect(purple_conversations_get_handle(), "conversation-updated", &handle,*/
+			/*PURPLE_CALLBACK(conversation_updated), NULL);*/
+	purple_signal_connect(purple_blist_get_handle(), "buddy-signed-off", &handle,
+			PURPLE_CALLBACK(buddy_signed_off), NULL);
+	purple_signal_connect(purple_blist_get_handle(), "buddy-signed-on", &handle,
+			PURPLE_CALLBACK(buddy_signed_on), NULL);
 }
 
 void handle_message(char *message) {
@@ -374,6 +429,7 @@ void handle_message(char *message) {
 				*message = 0;
 				message++;
 				conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, messageto, account);
+
 
 				/* If not, create a new one */
 				if (conv == NULL)
